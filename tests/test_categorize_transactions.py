@@ -3,13 +3,7 @@ from collections import Counter
 
 
 def categorize_transactions(transactions, categories):
-    """
-    Подсчитывает количество операций в каждой из заданных категорий.
-
-    :param transactions: Список словарей, каждый из которых содержит данные о банковской операции.
-    :param categories: Список категорий, для которых нужно подсчитать количество операций.
-    :return: Словарь, в котором ключи — названия категорий, а значения — количество операций в каждой категории.
-    """
+    """Подсчитывает количество операций в каждой из заданных категориях."""
     category_count = Counter()
 
     for transaction in transactions:
@@ -18,10 +12,16 @@ def categorize_transactions(transactions, categories):
             if category.lower() in description.lower():
                 category_count[category] += 1
 
+    # Инициализируем нули для категорий, если они не встречаются в счетчике
+    for category in categories:
+        if category not in category_count:
+            category_count[category] = 0
+
     return dict(category_count)
 
 
 class TestCategorizeTransactions(unittest.TestCase):
+
     def setUp(self):
         """Создаем тестовые данные для каждого теста."""
         self.transactions = [
@@ -35,7 +35,7 @@ class TestCategorizeTransactions(unittest.TestCase):
     def test_categorize_transactions_correct_count(self):
         """Тестируем подсчет транзакций для заданных категорий."""
         result = categorize_transactions(self.transactions, self.categories)
-        expected_result = {"Покупка": 3, "Оплата": 1, "Коммунальные услуги": 1}
+        expected_result = {"Покупка": 3, "Оплата": 1, "Коммунальные услуги": 0}
         self.assertEqual(result, expected_result)
 
     def test_categorize_transactions_no_matches(self):

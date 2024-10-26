@@ -1,67 +1,70 @@
-import re
 import unittest
 
-
-def filter_transactions(transactions, search_string):
-    """
-    Фильтрует список банковских операций по заданной строке поиска.
-
-    :param transactions: Список словарей, каждый из которых содержит данные о банковской операции.
-    :param search_string: Строка для поиска в описаниях операций.
-    :return: Список словарей, в которых описание содержит строку поиска.
-    """
-    # Компилируем регулярное выражение для поиска, игнорируя регистр
-    pattern = re.compile(re.escape(search_string), re.IGNORECASE)
-
-    # Фильтруем транзакции, оставляя только те, у которых описание соответствует паттерну
-    filtered_transactions = [
-        transaction
-        for transaction in transactions
-        if pattern.search(transaction.get("description", ""))
-    ]
-
-    return filtered_transactions
+from src.filter_transactions import filter_by_transactions
 
 
 class TestFilterTransactions(unittest.TestCase):
 
     def setUp(self):
-        """Создаем тестовые данные для каждого теста."""
+        """Инициализация тестового набора транзакций перед каждым тестом."""
         self.transactions = [
             {"id": 1, "description": "Покупка продуктов", "amount": 150},
             {"id": 2, "description": "Оплата коммунальных услуг", "amount": 75},
             {"id": 3, "description": "Покупка электроники", "amount": 300},
-            {"id": 4, "description": "Обслуживание автомобиля", "amount": 200},
+            {"id": 4, "description": "Продажа мебели", "amount": 500},
         ]
 
     def test_filter_transactions_case_insensitive(self):
-        """Тестируем фильтрацию с учетом регистра."""
-        result = filter_transactions(self.transactions, "покупка")
-        expected_result = [
-            {"id": 1, "description": "Покупка продуктов", "amount": 150},
-            {"id": 3, "description": "Покупка электроники", "amount": 300},
-        ]
-        self.assertEqual(result, expected_result)
+        """Тестирует фильтрацию транзакций с учетом регистра (без учета регистра).
+        Проверяет, что оба варианта совпадений 'покупка' возвращают правильные результаты.
+        """
+        result = filter_by_transactions(self.transactions, "покупка")
+        self.assertEqual(len(result), 2)  # Ожидаем 2 совпадения
+        self.assertEqual(result[0]["id"], 1)
+        self.assertEqual(result[1]["id"], 3)
 
-    def test_filter_transactions_no_matches(self):
-        """Тестируем случай, если нет совпадений."""
-        result = filter_transactions(self.transactions, "нет такого слова")
-        expected_result = []
-        self.assertEqual(result, expected_result)
+    def test_filter_transactions_no_results(self):
+        """Тестирует фильтрацию транзакций, когда нет совпадений.
+        Проверяет, что фильтрация по строке, которой нет в описаниях, возвращает пустой список.
+        """
+        result = filter_by_transactions(self.transactions, "нет запросов")
+        self.assertEqual(len(result), 0)  # Ожидаем 0 совпадений
 
     def test_filter_transactions_partial_match(self):
-        """Тестируем частичное совпадение."""
-        result = filter_transactions(self.transactions, "обслуживание")
-        expected_result = [
-            {"id": 4, "description": "Обслуживание автомобиля", "amount": 200},
-        ]
-        self.assertEqual(result, expected_result)
+        """Тестирует фильтрацию транзакций с частичным совпадением.
+        Проверяет, что фильтрация по части описания возвращает только те транзакции, которые соответствуют.
+        """
+        result = filter_by_transactions(self.transactions, "Коммунальных")
+        self.assertEqual(len(result), 1)  # Ожидаем 1 совпадение
+        self.assertEqual(result[0]["id"], 2)
 
-    def test_filter_transactions_empty_string(self):
-        """Тестируем случай фильтрации с пустой строкой поиска."""
-        result = filter_transactions(self.transactions, "")
-        expected_result = self.transactions  # Все транзакции должны быть возвращены
-        self.assertEqual(result, expected_result)
+    def test_filter_transactions_invalid_type(self):
+        """Тестирует поведение функции при предоставлении неверного типа данных.
+        Проверяет, что функция генерирует ValueError, когда передан неверный тип данных.
+        """
+        with self.assertRaises(ValueError) as context:
+            filter_by_transactions("это не список", "покупка")
+        self.assertEqual(str(context.exception), "transactions должна быть списка словарей")
+
+    def test_filter_transactions_empty_list(self):
+        """Тестирует фильтрацию пустого списка транзакций.
+        Проверяет, что функция возвращает пустой список, когда входной список пуст.
+        """
+        result = filter_by_transactions([], "покупка")
+        self.assertEqual(len(result), 0)  # Ожидаем 0 совпадений
+
+    def test_filter_transactions_with_non_dict_elements(self):
+        """Тестирует фильтрацию списка транзакций, содержащего не-словари.
+        Проверяет, что функция игнорирует неправильные элементы и возвращает те, что являются словарями.
+        """
+        mixed_transactions = [
+            {"id": 1, "description": "Покупка продуктов", "amount": 150},
+            "Неправильный элемент",
+            {"id": 2, "description": "Оплата коммунальных услуг", "amount": 75},
+        ]
+        result = filter_by_transactions(mixed_transactions, "покупка")
+        self.assertEqual(len(result), 1)  # Ожидаем 1 совпадение (с словарем)
+        self.assertEqual(result[0]["id"], 1)
 
 
 if __name__ == "__main__":

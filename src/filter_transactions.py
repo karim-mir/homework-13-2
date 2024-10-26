@@ -1,23 +1,26 @@
 import re
+from typing import Dict, List
 
 
-def filter_transactions(transactions, search_string):
+def filter_by_transactions(transactions: List[Dict[str, any]], search_term: str) -> List[Dict[str, any]]:
     """
     Фильтрует список банковских операций по заданной строке поиска.
 
     :param transactions: Список словарей, каждый из которых содержит данные о банковской операции.
-    :param search_string: Строка для поиска в описаниях операций.
+    :param search_term: Строка для поиска в описаниях операций.
     :return: Список словарей, в которых описание содержит строку поиска.
     """
+    if not isinstance(transactions, list):
+        raise ValueError("transactions должна быть списка словарей")
 
     # Компилируем регулярное выражение для поиска, игнорируя регистр
-    pattern = re.compile(re.escape(search_string), re.IGNORECASE)
+    pattern = re.compile(search_term, re.IGNORECASE)
 
     # Фильтруем транзакции, оставляя только те, у которых описание соответствует паттерну
     filtered_transactions = [
         transaction
         for transaction in transactions
-        if pattern.search(transaction.get("description", ""))
+        if isinstance(transaction, dict) and pattern.search(transaction.get("description", ""))
     ]
 
     return filtered_transactions
@@ -31,7 +34,8 @@ transactions = [
 ]
 
 # Фильтруем транзакции, ищем 'покупка'
-result = filter_transactions(transactions, "покупка")
-print(
-    result
-)
+try:
+    result = filter_by_transactions(transactions, "покупка")
+    print(result)
+except ValueError as e:
+    print(f"Ошибка: {e}")

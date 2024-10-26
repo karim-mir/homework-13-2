@@ -1,96 +1,203 @@
-import csv
-import json
+import os
 import unittest
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
-import pandas as pd
-
-# Здесь предполагается, что ваши функции определены в модуле my_module
-# from my_module import load_json, load_csv, load_xlsx, filter_transactions
+from src.main import get_transaction_choice, main, print_transactions, process_transactions
 
 
-def load_json(file_path):
-    """Загружает данные из JSON-файла."""
-    with open(file_path, "r") as file:
-        return json.load(file)
+class TestPrintTransactions(unittest.TestCase):
+    @patch("builtins.print")
+    def test_print_transactions_with_data(self, mock_print):
+        transactions = [
+            {"date": "2023-01-01", "description": "Purchase", "amount": 100.0, "currency_code": "USD"},
+            {"date": "2023-01-02", "description": "Withdrawal", "amount": 50.0, "currency_code": "EUR"},
+        ]
+        print_transactions(transactions)
+        # Проверяем, что первый вызов print был правильным
+        mock_print.assert_any_call("Всего банковских операций в выборке: 2")
+        # Проверяем, что информация о первой транзакции выведена правильно
+        mock_print.assert_any_call("2023-01-01 Purchase")
+        mock_print.assert_any_call("Сумма: 100.0 USD")
+        # Проверяем, что информация о второй транзакции выведена правильно
+        mock_print.assert_any_call("2023-01-02 Withdrawal")
+        mock_print.assert_any_call("Сумма: 50.0 EUR")
+
+        @patch("builtins.print")
+        def test_print_transactions_empty(self, mock_print):
+            transactions = []
+            print_transactions(transactions)
+
+            # Проверяем, что выводится правильное сообщение для пустого списка
+            mock_print.assert_called_once_with(
+                "Не найдено ни одной транзакции, подходящей под ваши условия фильтрации."
+            )
 
 
-def load_csv(file_path):
-    """Загружает данные из CSV-файла."""
-    with open(file_path, mode="r", encoding="utf-8") as file:
-        return list(csv.DictReader(file))
+class TestGetTransactionChoice(unittest.TestCase):
+
+    @patch("builtins.print")
+    @patch("builtins.input", side_effect=["1"])  # Имитация ввода пользователя
+    def test_get_transaction_choice(self, mock_input, mock_print):
+        choice = get_transaction_choice()
+
+        # Проверка, что функция возвращает правильный выбор
+        self.assertEqual(choice, "1")
+
+        # Проверка, что выводится правильный текст
+        mock_print.assert_any_call("Выберите необходимый пункт меню:")
+        mock_print.assert_any_call("1. Получить информацию о транзакциях из JSON-файла")
+        mock_print.assert_any_call("2. Получить информацию о транзакциях из Excel-файла")
+        mock_print.assert_any_call("3. Получить информацию о транзакциях из CSV-файла")
+
+    @patch("builtins.print")
+    @patch("src.main.load_transactions")
+    def test_process_transactions_json(self, mock_load_transactions, mock_print):
+        # Устанавливаем ожидаемое возвратное значение
+        mock_load_transactions.return_value = [{"date": "2023-01-01", "amount": 100.0}]
+
+        # Формируем путь к файлу transactions.json так же, как это сделано в функции
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        json_path = os.path.normpath(os.path.join(base_dir, "src", "data", "transactions.json"))
+
+        # Вызов функции, которую мы тестируем
+        result = process_transactions("1")
+
+        # Проверяем, что функция была вызвана с правильным аргументом
+        actual_path = mock_load_transactions.call_args[0][0]
+        self.assertEqual(os.path.normpath(actual_path), json_path, "Пути не совпадают!")
+
+        # Проверка вывода
+        mock_print.assert_called_once_with("Для обработки выбран JSON-файл.")
+
+        # Проверка возвращаемого результата
+        self.assertEqual(result, [{"date": "2023-01-01", "amount": 100.0}])
+
+    @patch("builtins.print")
+    @patch("src.main.get_financial_transactions_operations")
+    def test_process_transactions_xlsx(self, mock_load_transactions, mock_print):
+        # Устанавливаем ожидаемое возвратное значение
+        mock_load_transactions.return_value = [{"date": "2023-01-01", "amount": 100.0}]
+
+        # Формируем путь к файлу transactions.xlsx так же, как это сделано в функции
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        xlsx_path = os.path.normpath(os.path.join(base_dir, "src", "data", "transactions_excel.xlsx"))
+
+        # Вызов функции, которую мы тестируем
+        result = process_transactions("2")
+
+        # Проверяем, что функция была вызвана с правильным аргументом
+        actual_path = mock_load_transactions.call_args[0][0]
+        self.assertEqual(os.path.normpath(actual_path), xlsx_path, "Пути не совпадают!")
+
+        # Проверка вывода
+        mock_print.assert_called_once_with("Для обработки выбран Excel-файл.")
+
+        # Проверка возвращаемого результата
+        self.assertEqual(result, [{"date": "2023-01-01", "amount": 100.0}])
+
+    @patch("builtins.print")
+    @patch("src.main.get_financial_transactions")
+    def test_process_transactions_csv(self, mock_load_transactions, mock_print):
+        # Устанавливаем ожидаемое возвратное значение
+        mock_load_transactions.return_value = [{"date": "2023-01-01", "amount": 100.0}]
+
+        # Формируем путь к файлу transactions.json так же, как это сделано в функции
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        csv_path = os.path.normpath(os.path.join(base_dir, "src", "data", "transactions.csv"))
+
+        # Вызов функции, которую мы тестируем
+        result = process_transactions("3")
+
+        # Проверяем, что функция была вызвана с правильным аргументом
+        actual_path = mock_load_transactions.call_args[0][0]
+        self.assertEqual(os.path.normpath(actual_path), csv_path, "Пути не совпадают!")
+
+        # Проверка вывода
+        mock_print.assert_called_once_with("Для обработки выбран CSV-файл.")
+
+        # Проверка возвращаемого результата
+        self.assertEqual(result, [{"date": "2023-01-01", "amount": 100.0}])
 
 
-def load_xlsx(file_path):
-    """Загружает данные из XLSX-файла."""
-    df = pd.read_excel(file_path)
-    return df.to_dict(orient="records")
-
-
-def filter_transactions(transactions, status):
-    """Фильтрует список транзакций по указанному статусу."""
-    return [
-        transaction
-        for transaction in transactions
-        if transaction.get("status", "").lower() == status.lower()
-    ]
-
-
-class TestBankingFunctions(unittest.TestCase):
+class TestMainFunction(unittest.TestCase):
 
     @patch(
-        "builtins.open",
-        new_callable=mock_open,
-        read_data='[{"id": 1, "status": "EXECUTED"}]',
+        "builtins.input",
+        side_effect=[
+            "1",  # Выбор транзакции
+            "да",  # Сортировать по дате
+            "возрастанию",  # Порядок сортировки
+            "да",  # Фильтровать по рублевым транзакциям
+            "да",  # Дополнительная фильтрация
+            "тест",  # Слово для поиска в описании
+        ],
     )
-    def test_load_json(self, mock_file):
-        result = load_json("fake_path.json")
-        expected = [{"id": 1, "status": "EXECUTED"}]
-        self.assertEqual(result, expected)
+    @patch("src.main.process_transactions")
+    @patch("src.main.filter_transactions_by_state")
+    @patch("src.main.sort_by_date")
+    @patch("src.main.filter_by_currency")
+    @patch("src.main.filter_by_transactions")
+    @patch("src.main.print_transactions")
+    def test_main_successful_flow(
+        self,
+        mock_print_transactions,
+        mock_filter_by_transactions,
+        mock_filter_by_currency,
+        mock_sort_by_date,
+        mock_filter_transactions_by_state,
+        mock_process_transactions,
+        mock_input,
+    ):
+
+        # Настроим ожидания
+        mock_process_transactions.return_value = [{"id": 1, "description": "тест транзакция", "currency": "RUB"}]
+        mock_filter_transactions_by_state.return_value = [
+            {"id": 1, "description": "тест транзакция", "currency": "RUB"}
+        ]
+        mock_sort_by_date.return_value = [{"id": 1, "description": "тест транзакция", "currency": "RUB"}]
+        mock_filter_by_currency.return_value = [{"id": 1, "description": "тест транзакция", "currency": "RUB"}]
+        mock_filter_by_transactions.return_value = [{"id": 1, "description": "тест транзакция", "currency": "RUB"}]
+
+        # Вызов функции main
+        main()
+
+        # Проверяем вызовы
+        mock_process_transactions.assert_called_once_with("1")
+        mock_filter_transactions_by_state.assert_called_once()
+        mock_sort_by_date.assert_called_once_with(mock_filter_transactions_by_state.return_value, "возрастанию")
+        mock_filter_by_currency.assert_called_once_with(mock_sort_by_date.return_value, "RUB")
+        mock_filter_by_transactions.assert_called_once_with(mock_filter_by_currency.return_value, "тест")
+        mock_print_transactions.assert_called_once_with(mock_filter_by_transactions.return_value)
 
     @patch(
-        "builtins.open",
-        new_callable=mock_open,
-        read_data="id,description,amount\n1,Покупка,150\n2,Оплата,75\n",
+        "builtins.input",
+        side_effect=[
+            "1",  # Выбор транзакции
+            "нет",  # Не сортировать по дате
+            "нет",  # Не фильтровать по рублевым транзакциям
+            "нет",  # Не проводить дополнительную фильтрацию
+        ],
     )
-    def test_load_csv(self, mock_file):
-        result = load_csv("fake_path.csv")
-        expected = [
-            {"id": "1", "description": "Покупка", "amount": "150"},
-            {"id": "2", "description": "Оплата", "amount": "75"},
-        ]
-        self.assertEqual(result, expected)
+    @patch("src.main.process_transactions")
+    @patch("src.main.filter_transactions_by_state")
+    @patch("src.main.print_transactions")
+    def test_main_without_sorting_and_filtering(
+        self, mock_print_transactions, mock_filter_transactions_by_state, mock_process_transactions, mock_input
+    ):
 
-    @patch("pandas.read_excel")
-    def test_load_xlsx(self, mock_read_excel):
-        mock_read_excel.return_value = pd.DataFrame(
-            {"id": [1, 2], "status": ["EXECUTED", "PENDING"]}
-        )
-        result = load_xlsx("fake_path.xlsx")
-        expected = [{"id": 1, "status": "EXECUTED"}, {"id": 2, "status": "PENDING"}]
-        self.assertEqual(result, expected)
+        # Настроим ожидания
+        mock_process_transactions.return_value = [{"id": 2, "description": "другая транзакция", "currency": "USD"}]
+        mock_filter_transactions_by_state.return_value = [
+            {"id": 2, "description": "другая транзакция", "currency": "USD"}
+        ]
 
-    def test_filter_transactions(self):
-        transactions = [
-            {"id": 1, "description": "Покупка продуктов", "status": "EXECUTED"},
-            {"id": 2, "description": "Оплата коммунальных услуг", "status": "CANCELED"},
-            {"id": 3, "description": "Покупка", "status": "EXECUTED"},
-        ]
-        result = filter_transactions(transactions, "EXECUTED")
-        expected = [
-            {"id": 1, "description": "Покупка продуктов", "status": "EXECUTED"},
-            {"id": 3, "description": "Покупка", "status": "EXECUTED"},
-        ]
-        self.assertEqual(result, expected)
+        # Вызов функции main
+        main()
 
-    def test_filter_transactions_no_matches(self):
-        transactions = [
-            {"id": 1, "description": "Покупка продуктов", "status": "EXECUTED"},
-            {"id": 2, "description": "Оплата коммунальных услуг", "status": "CANCELED"},
-        ]
-        result = filter_transactions(transactions, "PENDING")
-        expected = []
-        self.assertEqual(result, expected)
+        # Проверяем вызовы
+        mock_process_transactions.assert_called_once_with("1")
+        mock_filter_transactions_by_state.assert_called_once()
+        mock_print_transactions.assert_called_once_with(mock_filter_transactions_by_state.return_value)
 
 
 if __name__ == "__main__":

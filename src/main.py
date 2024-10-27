@@ -82,7 +82,17 @@ def main():
     sort_decision = input("Программа: Отсортировать операции по дате? Да/Нет: ").strip().lower()
     if sort_decision == "да":
         order = input("Программа: Отсортировать по возрастанию или по убыванию? ").strip().lower()
-        filtered_transactions = sort_by_date(filtered_transactions, order)
+
+        # Преобразуем ввод пользователя в boolean
+        if order == "возрастанию":
+            reverse = False
+        elif order == "убыванию":
+            reverse = True
+        else:
+            print("Неверный ввод. Сортировка не выполнена.")
+            return
+
+        filtered_transactions = sort_by_date(filtered_transactions, reverse)
 
     # Фильтрация по валюте
     currency_decision = input("Программа: Выводить только рублевые транзакции? Да/Нет: ").strip().lower()

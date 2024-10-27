@@ -31,17 +31,20 @@ transactions = [
 
 def filter_transactions(start_date, end_date):
     """Фильтрует транзакции по заданному диапазону дат."""
-    return [t for t in transactions if start_date <= datetime.strptime(t["date"], "%Y-%m-%d") <= end_date]
+    return [
+        t for t in transactions
+        if start_date <= datetime.strptime(t['date'], '%Y-%m-%d') <= end_date
+    ]
 
 
 def calculate_expenses(transactions):
     """Расчет общей суммы расходов и расходов по категориям."""
-    total_expenses = -sum(t["amount"] for t in transactions if t["amount"] < 0)
+    total_expenses = -sum(t['amount'] for t in transactions if t['amount'] < 0)
     category_totals = defaultdict(float)
 
     for t in transactions:
-        if t["amount"] < 0:
-            category_totals[t["category"]] += -t["amount"]  # Суммируем только расходы
+        if t['amount'] < 0:
+            category_totals[t['category']] += -t['amount']  # Суммируем только расходы
 
     sorted_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
     main_expenses = sorted_categories[:6]
@@ -49,8 +52,8 @@ def calculate_expenses(transactions):
 
     return {
         "total_amount": total_expenses,
-        "main": [{"category": category, "amount": amount} for category, amount in main_expenses]
-        + [{"category": "Остальное", "amount": other_expenses}],
+        "main": [{"category": category, "amount": amount} for category, amount in main_expenses] +
+                [{"category": "Остальное", "amount": other_expenses}]
     }
 
 
@@ -61,36 +64,35 @@ def get_currency_data():
         "apikey": os.getenv("CURRENCY_API_KEY"),
     }
     response = requests.get(url, headers=headers).json()
-    return [
-        {"currency": currency, "rate": rate}
-        for currency, rate in response.get("rates", {}).items()
-        if currency in user_settings["user_currencies"]
-    ]
+    return [{"currency": currency, "rate": rate} for currency, rate in response.get("rates", {}).items() if
+            currency in user_settings["user_currencies"]]
 
 
 def get_stock_data(symbol):
-    """Получает данные о цене конкретной акции из API."""
-    api_key = os.getenv("STOCK_API_KEY")
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
+    """Получает данные о ценах на акции из API."""
+    api_key = os.getenv('STOCK_API_KEY')
 
+    url = f"{os.getenv('CURRENCY_API_URL')}?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
     response = requests.get(url)
 
-    # Проверяем статус-код ответа
     if response.status_code != 200:
-        print(f"Error: Received response status {response.status_code}")
-        return {"error": "Unable to retrieve data, please check the stock symbol or API key."}
+        raise ValueError(f"Ошибка API: {response.status_code} - {response.json().get('Error Message', 'Неизвестная ошибка')}")
 
     try:
-        stock_data = response.json()
-        return stock_data
-    except ValueError:
-        print("Error: Response is not valid JSON")
-        return {"error": "Invalid response from the server."}
+        stock_data = response.json().get("Time Series (Daily)", {})
+    except ValueError as e:
+        raise ValueError(f"Ошибка парсинга JSON: {str(e)}")
+
+    if not stock_data:
+        raise ValueError("Ошибка при получении данных акций.")
+
+    latest_date = next(iter(stock_data))
+    return [{'stock': symbol, 'price': float(stock_data[latest_date]["4. close"])}]
 
 
 def generate_report(date_str):
     """Генерирует отчет на основе входной даты."""
-    current_date = datetime.strptime(date_str, "%Y-%m-%d")
+    current_date = datetime.strptime(date_str, '%Y-%m-%d')
     start_date = current_date.replace(day=1)
     end_date = current_date
 

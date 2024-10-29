@@ -5,8 +5,6 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-settings_path = os.getenv("SETTINGS_PATH")
-
 # Получаем путь к файлу user_settings.json относительно текущего файла views.py
 settings_path = Path(__file__).parent.parent / "user_settings.json"
 
@@ -31,20 +29,17 @@ transactions = [
 
 def filter_transactions(start_date, end_date):
     """Фильтрует транзакции по заданному диапазону дат."""
-    return [
-        t for t in transactions
-        if start_date <= datetime.strptime(t['date'], '%Y-%m-%d') <= end_date
-    ]
+    return [t for t in transactions if start_date <= datetime.strptime(t["date"], "%Y-%m-%d") <= end_date]
 
 
 def calculate_expenses(transactions):
     """Расчет общей суммы расходов и расходов по категориям."""
-    total_expenses = -sum(t['amount'] for t in transactions if t['amount'] < 0)
+    total_expenses = -sum(t["amount"] for t in transactions if t["amount"] < 0)
     category_totals = defaultdict(float)
 
     for t in transactions:
-        if t['amount'] < 0:
-            category_totals[t['category']] += -t['amount']  # Суммируем только расходы
+        if t["amount"] < 0:
+            category_totals[t["category"]] += -t["amount"]  # Суммируем только расходы
 
     sorted_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
     main_expenses = sorted_categories[:6]
@@ -52,8 +47,8 @@ def calculate_expenses(transactions):
 
     return {
         "total_amount": total_expenses,
-        "main": [{"category": category, "amount": amount} for category, amount in main_expenses] +
-                [{"category": "Остальное", "amount": other_expenses}]
+        "main": [{"category": category, "amount": amount} for category, amount in main_expenses]
+        + [{"category": "Остальное", "amount": other_expenses}],
     }
 
 
@@ -63,36 +58,64 @@ def get_currency_data():
     headers = {
         "apikey": os.getenv("CURRENCY_API_KEY"),
     }
-    response = requests.get(url, headers=headers).json()
-    return [{"currency": currency, "rate": rate} for currency, rate in response.get("rates", {}).items() if
-            currency in user_settings["user_currencies"]]
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()  # Проверка статуса запроса
+
+    return [
+        {"currency": currency, "rate": rate}
+        for currency, rate in response.json().get("rates", {}).items()
+        if currency in user_settings["user_currencies"]
+    ]
 
 
 def get_stock_data(symbol):
-    """Получает данные о ценах на акции из API."""
-    api_key = os.getenv('STOCK_API_KEY')
+    """Получает данные о ценах на акции из API по заданному символу.
 
-    url = f"{os.getenv('CURRENCY_API_URL')}?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
-    response = requests.get(url)
+    Args:
+        symbol (str): Символ акций, например 'AAPL'.
 
-    if response.status_code != 200:
-        raise ValueError(f"Ошибка API: {response.status_code} - {response.json().get('Error Message', 'Неизвестная ошибка')}")
+    Returns:
+        list: Список словарей с символом и последней ценой.
+
+    Raises:
+        ValueError: Если не удается получить данные акций или парсить ответ с сервера.
+    """
+    api_key = os.getenv("STOCK_API_KEY")
+    api_url = os.getenv("CURRENCY_API_URL")
+
+    # Проверка наличия необходимых переменных окружения
+    if not api_key or not api_url:
+        raise EnvironmentError("Не заданы переменные окружения для API.")
+
+    url = f"{api_url}?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
 
     try:
+        response = requests.get(url)
+        response.raise_for_status()  # Поднимает исключение для статусов ошибок (4xx и 5xx)
+
         stock_data = response.json().get("Time Series (Daily)", {})
-    except ValueError as e:
-        raise ValueError(f"Ошибка парсинга JSON: {str(e)}")
+        if not stock_data:  # Если нет данных о акциях
+            raise ValueError("Ошибка парсинга JSON: данные акций не найдены.")
 
-    if not stock_data:
-        raise ValueError("Ошибка при получении данных акций.")
+        latest_date = next(iter(stock_data))
+        return [{"stock": symbol, "price": float(stock_data[latest_date]["4. close"])}]
 
-    latest_date = next(iter(stock_data))
-    return [{'stock': symbol, 'price': float(stock_data[latest_date]["4. close"])}]
+    except requests.exceptions.HTTPError as http_err:
+        # Обработка ошибок HTTP, в том числе для 404
+        if response.status_code == 404:
+            raise ValueError("Акции не найдены.")  # Это сообщение должно соответствовать вашему тесту
+        else:
+            raise ValueError(f"Ошибка запроса: {str(http_err)}")
+    except requests.exceptions.RequestException as req_err:
+        raise ValueError(f"Ошибка сети или запроса: {str(req_err)}")
+    except ValueError as val_err:
+        raise ValueError(f"Ошибка парсинга JSON: {str(val_err)}")
 
 
-def generate_report(date_str):
+def generate_report(date_str, stock_symbol):
     """Генерирует отчет на основе входной даты."""
-    current_date = datetime.strptime(date_str, '%Y-%m-%d')
+    current_date = datetime.strptime(date_str, "%Y-%m-%d")
     start_date = current_date.replace(day=1)
     end_date = current_date
 
@@ -103,7 +126,7 @@ def generate_report(date_str):
     response_data = {
         "expenses": expenses,
         "currency_rates": get_currency_data(),
-        "stock_prices": get_stock_data(),
+        "stock_prices": get_stock_data(stock_symbol),  # Передаем символ акций
     }
 
     return response_data

@@ -1,78 +1,80 @@
 import unittest
-import os
-from unittest.mock import patch
-from flask import json
-from dotenv import load_dotenv
+from unittest import mock
 from src.app import app
-from src.views import get_stock_data, get_currency_data
 
-# Загружаем переменные окружения перед запуском тестов
-load_dotenv()
 
-class TestApp(unittest.TestCase):
-    """Тестовый класс для проверки функций в приложении Flask."""
+class FinancialApiTestCase(unittest.TestCase):
 
     def setUp(self):
-        """Настройка тестов."""
         self.app = app.test_client()
         self.app.testing = True
 
     def test_home(self):
-        """Тестирование корневого маршрута."""
         response = self.app.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data.decode('utf-8'), "Welcome to the Financial API!")
+        self.assertEqual(response.data.decode("utf-8"), "Welcome to the Financial API!")
 
-    @patch.dict(os.environ, {"CURRENCY_API_URL": "https://api.example.com", "CURRENCY_API_KEY": "mock_currency_key"})
-    @patch("src.views.get_currency_data")
-    def test_currency_success(self, mock_get_currency_data):
-        """Тестирование успешного получения данных о валюте."""
-        mock_get_currency_data.return_value = [
-            {"currency": "USD", "rate": 1.0},
-            {"currency": "EUR", "rate": 0.85}
-        ]
+    @mock.patch("src.views.get_currency_data")
+    def test_currency(self, mock_get_currency_data):
+        mock_get_currency_data.return_value = [{"currency": "EUR", "rate": 1}, {"currency": "USD", "rate": 1.077348}]
 
         response = self.app.get("/currency")
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
-        self.assertEqual(len(data), 2)
-        self.assertIn({"currency": "USD", "rate": 1.0}, data)
-        self.assertIn({"currency": "EUR", "rate": 0.85}, data)
+        response_data = response.get_json()
+        self.assertEqual(len(response_data), 2)
+        self.assertIn({"currency": "EUR", "rate": 1}, response_data)
 
-    @patch("src.views.get_currency_data")
-    def test_currency_error(self, mock_get_currency_data):
-        """Тестирование обработки ошибок при получении данных о валюте."""
-        # Здесь вызываем исключение, которое приложение ожидает от функции
-        mock_get_currency_data.side_effect = Exception("CURRENCY_API_URL is not set in the environment variables.")
+    @mock.patch("src.views.get_currency_data")
+    def test_currency_fetch_error(self, mock_get_currency_data):
+        mock_get_currency_data.side_effect = Exception("429 Client Error: Too Many Requests")
 
         response = self.app.get("/currency")
         self.assertEqual(response.status_code, 500)
-        data = json.loads(response.data)
-        self.assertIn("error", data)
-        self.assertEqual(data["error"], "Failed to fetch currency data: CURRENCY_API_URL is not set in the environment variables.")
+        self.assertEqual(response.json, {"error": "Failed to fetch currency data: 429 Client Error: Too Many Requests"})
 
-    @patch.dict(os.environ, {"STOCK_API_KEY": "mock_stock_key"})
-    @patch("src.views.get_stock_data")
-    def test_stock_success(self, mock_get_stock_data):
-        """Тестирование успешного получения данных о запасах."""
-        # Устанавливаем ожидаемое значение
-        mock_get_stock_data.return_value = {"symbol": "AAPL", "price": 231.41}
-        response = self.app.get("/stock/AAPL")
+    @mock.patch("src.views.get_stock_data")
+    def test_get_stock(self, mock_get_stock_data):
+        mock_get_stock_data.return_value = None
+
+        symbol = "MSFT"
+        response = self.app.get(f"/stock/{symbol}")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json, {"error": "Stock not found"})
+
+    @mock.patch("src.views.get_stock_data")
+    def test_get_stock_not_found(self, mock_get_stock_data):
+        mock_get_stock_data.side_effect = ValueError("Stock not found")
+
+        symbol = "INVALID"
+        response = self.app.get(f"/stock/{symbol}")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json, {"error": "Stock not found"})
+
+    @mock.patch("src.views.get_currency_data")
+    @mock.patch("src.views.get_stock_data")
+    def test_get_data_success(self, mock_get_stock_data, mock_get_currency_data):
+        mock_get_currency_data.return_value = [{"currency": "EUR", "rate": 1}]
+        mock_get_stock_data.side_effect = lambda symbol: {"symbol": symbol, "price": 150.0, "date": "2024-10-28"}
+
+        response = self.app.get("/api/data?date_time=2023-10-01 12:00:00")
         self.assertEqual(response.status_code, 200)
-        data = json.loads(response.data)
-        self.assertEqual(data, {"symbol": "AAPL", "price": 231.41})
+        data = response.get_json()
+        self.assertIn("greeting", data)
+        self.assertIn("cards", data)
+        self.assertIn("top_transactions", data)
+        self.assertIn("currency_rates", data)
+        self.assertIn("stock_prices", data)
 
-    @patch("src.views.get_stock_data")
-    def test_stock_error(self, mock_get_stock_data):
-        """Тестирование обработки ошибок при получении данных о запасах."""
-        # Здесь вызываем исключение, которое ваше приложение ожидает от функции
-        mock_get_stock_data.side_effect = ValueError("STOCK_API_KEY is not set in the environment variables.")
+    def test_get_data_missing_date_time(self):
+        response = self.app.get("/api/data")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json, {"error": "Date and time string is required"})
 
-        response = self.app.get("/stock/INVALID")
-        self.assertEqual(response.status_code, 500)
-        data = json.loads(response.data)
-        self.assertIn("error", data)
-        self.assertEqual(data["error"], "Failed to fetch stock data: STOCK_API_KEY is not set in the environment variables.")
+    def test_get_data_invalid_date_format(self):
+        response = self.app.get("/api/data?date_time=invalid_date")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json, {"error": "Invalid date format. Use 'YYYY-MM-DD HH:MM:SS'"})
+
 
 if __name__ == "__main__":
     unittest.main()

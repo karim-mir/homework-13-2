@@ -164,7 +164,7 @@ class TestMainFunction(unittest.TestCase):
         # Проверяем вызовы
         mock_process_transactions.assert_called_once_with("1")
         mock_filter_transactions_by_state.assert_called_once()
-        mock_sort_by_date.assert_called_once_with(mock_filter_transactions_by_state.return_value, "возрастанию")
+        mock_sort_by_date.assert_called_once_with(mock_filter_transactions_by_state.return_value, False)
         mock_filter_by_currency.assert_called_once_with(mock_sort_by_date.return_value, "RUB")
         mock_filter_by_transactions.assert_called_once_with(mock_filter_by_currency.return_value, "тест")
         mock_print_transactions.assert_called_once_with(mock_filter_by_transactions.return_value)

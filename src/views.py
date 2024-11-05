@@ -1,9 +1,11 @@
-import os
 import json
-import requests
-from pathlib import Path
-from datetime import datetime
+import logging
+import os
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+import requests
 
 # Получаем путь к файлу user_settings.json относительно текущего файла views.py
 settings_path = Path(__file__).parent.parent / "user_settings.json"
@@ -80,36 +82,48 @@ def get_stock_data(symbol):
 
     Raises:
         ValueError: Если не удается получить данные акций или парсить ответ с сервера.
+        EnvironmentError: Если не заданы переменные окружения для API.
     """
     api_key = os.getenv("STOCK_API_KEY")
-    api_url = os.getenv("CURRENCY_API_URL")
+    api_url = os.getenv("STOCK_API_URL")
 
-    # Проверка наличия необходимых переменных окружения
     if not api_key or not api_url:
         raise EnvironmentError("Не заданы переменные окружения для API.")
 
-    url = f"{api_url}?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
+    url = f"{api_url}query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
 
     try:
         response = requests.get(url)
         response.raise_for_status()  # Поднимает исключение для статусов ошибок (4xx и 5xx)
 
+        logging.info(f"HTTP Status Code: {response.status_code}")
+        logging.info(f"Response Headers: {response.headers}")
+
+        # Проверка типа контента
+        if response.headers.get("Content-Type") != "application/json":
+            raise ValueError("Получена некорректная страница вместо JSON. Проверьте API URL и ключ.")
+
         stock_data = response.json().get("Time Series (Daily)", {})
         if not stock_data:  # Если нет данных о акциях
-            raise ValueError("Ошибка парсинга JSON: данные акций не найдены.")
+            raise ValueError("Данные акций не найдены.")
 
         latest_date = next(iter(stock_data))
         return [{"stock": symbol, "price": float(stock_data[latest_date]["4. close"])}]
 
     except requests.exceptions.HTTPError as http_err:
-        # Обработка ошибок HTTP, в том числе для 404
+        logging.error("HTTP error occurred: %s", str(http_err))
         if response.status_code == 404:
-            raise ValueError("Акции не найдены.")  # Это сообщение должно соответствовать вашему тесту
+            logging.error("Requested stock not found: %s", symbol)
+            raise ValueError("Акции не найдены.")
         else:
             raise ValueError(f"Ошибка запроса: {str(http_err)}")
+
     except requests.exceptions.RequestException as req_err:
+        logging.error("Network or request error: %s", str(req_err))
         raise ValueError(f"Ошибка сети или запроса: {str(req_err)}")
+
     except ValueError as val_err:
+        logging.error("JSON parsing error: %s", str(val_err))
         raise ValueError(f"Ошибка парсинга JSON: {str(val_err)}")
 
 

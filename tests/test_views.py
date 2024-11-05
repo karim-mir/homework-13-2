@@ -1,29 +1,24 @@
 import os
-import json
 import unittest
-from unittest import mock
 from datetime import datetime
-from src.views import (
-    filter_transactions,
-    calculate_expenses,
-    get_currency_data,
-    get_stock_data,
-    generate_report,
-)
+from unittest.mock import MagicMock, patch
+
+from src.views import calculate_expenses, filter_transactions, generate_report, get_currency_data, get_stock_data
 
 
-class FinancialAppTestCase(unittest.TestCase):
+class TestFinanceModule(unittest.TestCase):
+    """Тесты для модуля финансовых операций."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Настройка окружения для всех тестов."""
+        os.environ["CURRENCY_API_URL"] = "http://fakeapi.com"
+        os.environ["CURRENCY_API_KEY"] = "fakeapikey"
+        os.environ["STOCK_API_URL"] = "http://fakeapi.com"
+        os.environ["STOCK_API_KEY"] = "fakeapikey"
 
     def setUp(self):
-        self.user_settings = {"user_currencies": ["USD", "EUR"]}
-        with open("user_settings.json", "w") as f:
-            json.dump(self.user_settings, f)
-
-        os.environ["CURRENCY_API_URL"] = "https://api.exchangeratesapi.io"
-        os.environ["CURRENCY_API_KEY"] = "test_api_key"
-        os.environ["STOCK_API_KEY"] = "test_stock_api_key"
-
-        # Определяем транзакции здесь
+        """Инициализация тестовых данных перед каждым тестом."""
         self.transactions = [
             {"date": "2020-05-01", "amount": -17319, "category": "Супермаркеты"},
             {"date": "2020-05-02", "amount": -3324, "category": "Фастфуд"},
@@ -33,85 +28,77 @@ class FinancialAppTestCase(unittest.TestCase):
             {"date": "2020-05-15", "amount": 1242, "category": "Проценты_на_остаток"},
         ]
 
-    def tearDown(self):
-        try:
-            os.remove("user_settings.json")
-        except FileNotFoundError:
-            pass
+    @patch("src.views.requests.get")
+    def test_get_currency_data(self, mock_get):
+        """Тест получения данных о валюте."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"rates": {"USD": 74.21, "EUR": 88.47}}
+        mock_get.return_value = mock_response
+
+        results = get_currency_data()
+        expected = [{"currency": "USD", "rate": 74.21}, {"currency": "EUR", "rate": 88.47}]
+        self.assertEqual(results, expected)
 
     def test_filter_transactions(self):
+        """Тест фильтрации транзакций по дате."""
         start_date = datetime.strptime("2020-05-01", "%Y-%m-%d")
-        end_date = datetime.strptime("2020-05-10", "%Y-%m-%d")
+        end_date = datetime.strptime("2020-05-03", "%Y-%m-%d")
         filtered = filter_transactions(start_date, end_date)
-        self.assertEqual(len(filtered), 5)  # 5 транзакций попадает в этот диапазон
+        self.assertEqual(len(filtered), 3)  # Должно вернуть 3 транзакции
 
     def test_calculate_expenses(self):
-        result = calculate_expenses(self.transactions)
-        self.assertEqual(result["total_amount"], 17319 + 3324 + 2289 + 1850)
-        self.assertGreater(len(result["main"]), 0)  # Должно быть хотя бы одна категория расходов
+        """Тест калькуляции расходов."""
+        expenses = calculate_expenses(self.transactions)
+        self.assertEqual(expenses["total_amount"], 24782)  # Общая сумма расходов
+        self.assertEqual(len(expenses["main"]), 5)  # Должно вернуть 5 основные категории
 
-    @mock.patch("requests.get")
-    def test_get_currency_data(self, mock_get):
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {"rates": {"USD": 1.0, "EUR": 0.85, "GBP": 0.75}}
-        mock_get.return_value = mock_response
+    @patch("src.views.requests.get")
+    def test_get_stock_data(self, mock_get):
+        """Тест получения данных о фондовом рынке."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"Time Series (Daily)": {"2020-05-15": {"4. close": "100.00"}}}
+        mock_response.headers = {"Content-Type": "application/json"}  # Установка заголовка
+        mock_response.status_code = 200  # Установка успешного кода ответа
+        mock_get.return_value = mock_response  # Возвращаем мок-ответ
 
-        currencies = get_currency_data()
-        self.assertEqual(len(currencies), 2)  # Должны быть только USD и EUR в user_settings
+        result = get_stock_data("AAPL")
+        self.assertEqual(result, [{"stock": "AAPL", "price": 100.00}])
 
-    @mock.patch("requests.get")
-    def test_get_stock_data_success(self, mock_get):
-        symbol = "AAPL"
-        mock_response = mock.Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"Time Series (Daily)": {"2024-10-27": {"4. close": "150.00"}}}
-        mock_get.return_value = mock_response
-
-        stock_data = get_stock_data(symbol)
-        self.assertEqual(stock_data[0]["stock"], "AAPL")
-        self.assertEqual(stock_data[0]["price"], 150.00)
-
-    @mock.patch("requests.get")
-    def test_get_stock_data_not_found(self, mock_get):
-        symbol = "AAPL"
-        mock_response = mock.Mock()
-        mock_response.status_code = 404
-        mock_response.json.return_value = {"Time Series (Daily)": {}}
-        mock_get.return_value = mock_response
+    @patch("src.views.requests.get")
+    def test_get_stock_data_invalid_json(self, mock_get):
+        """Тест получения данных о фондовом рынке с некорректным JSON."""
+        mock_response = MagicMock()
+        mock_response.headers = {"Content-Type": "text/html"}  # Некорректный заголовок
+        mock_response.status_code = 200  # Установка успешного кода ответа
+        mock_get.return_value = mock_response  # Возвращаем некорректный мок-ответ
 
         with self.assertRaises(ValueError) as context:
-            get_stock_data(symbol)
+            get_stock_data("AAPL")
 
         self.assertEqual(
-            str(context.exception), "Ошибка парсинга JSON: Ошибка парсинга JSON: данные акций не найдены."
+            str(context.exception),
+            "Ошибка парсинга JSON: Получена некорректная страница вместо JSON. Проверьте API URL и ключ.",
         )
 
-    @mock.patch("requests.get")
-    def test_generate_report(self, mock_get):
-        # Имитация валютных данных
-        mock_response_currency = mock.Mock()
-        mock_response_currency.json.return_value = {
-            "rates": {
-                "USD": 1.0,
-                "EUR": 0.85,
-            }
-        }
-        mock_get.side_effect = [mock_response_currency]
+    @patch("src.views.get_currency_data")
+    @patch("src.views.get_stock_data")
+    @patch("src.views.filter_transactions")
+    @patch("src.views.calculate_expenses")
+    def test_generate_report(
+        self, mock_calculate_expenses, mock_filter_transactions, mock_get_stock_data, mock_get_currency_data
+    ):
+        """Тест генерации финансового отчета."""
+        mock_filter_transactions.return_value = self.transactions
+        mock_calculate_expenses.return_value = {"total_amount": 24782, "main": []}
+        mock_get_currency_data.return_value = [{"currency": "USD", "rate": 74.21}]
+        mock_get_stock_data.return_value = [{"stock": "AAPL", "price": 100.00}]
 
-        # Имитация данных акций
-        symbol = "AAPL"
-        mock_response_stock = mock.Mock()
-        mock_response_stock.status_code = 200
-        mock_response_stock.json.return_value = {"Time Series (Daily)": {"2024-10-27": {"4. close": "150.00"}}}
-        mock_get.side_effect = [mock_response_currency, mock_response_stock]
+        report = generate_report("2020-05-15", "AAPL")
 
-        # Передаем символ акций
-        report = generate_report("2024-10-01", symbol)
         self.assertIn("expenses", report)
         self.assertIn("currency_rates", report)
         self.assertIn("stock_prices", report)
-        self.assertEqual(report["stock_prices"][0]["stock"], "AAPL")
-        self.assertEqual(report["stock_prices"][0]["price"], 150.00)
+        self.assertEqual(report["stock_prices"], [{"stock": "AAPL", "price": 100.00}])
 
 
 if __name__ == "__main__":

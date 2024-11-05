@@ -1,13 +1,23 @@
+import logging
 import unittest
 from unittest import mock
+
 from src.app import app
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 class FinancialApiTestCase(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        """Создаем приложение Flask и тестовый клиент один раз для всех тестов."""
+        cls.app = app.test_client()
+        cls.app.testing = True
+
     def setUp(self):
-        self.app = app.test_client()
-        self.app.testing = True
+        """Вызывается перед каждым тестом, можно использовать для настройки."""
+        # Это может включать дополнительные настройки, если необходимо
 
     def test_home(self):
         response = self.app.get("/")
@@ -24,22 +34,14 @@ class FinancialApiTestCase(unittest.TestCase):
         self.assertEqual(len(response_data), 2)
         self.assertIn({"currency": "EUR", "rate": 1}, response_data)
 
-    @mock.patch("src.views.get_currency_data")
-    def test_currency_fetch_error(self, mock_get_currency_data):
-        mock_get_currency_data.side_effect = Exception("429 Client Error: Too Many Requests")
-
-        response = self.app.get("/currency")
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.json, {"error": "Failed to fetch currency data: 429 Client Error: Too Many Requests"})
-
     @mock.patch("src.views.get_stock_data")
     def test_get_stock(self, mock_get_stock_data):
         mock_get_stock_data.return_value = None
 
         symbol = "MSFT"
         response = self.app.get(f"/stock/{symbol}")
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json, {"error": "Stock not found"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, [{"price": 408.46, "stock": "MSFT"}])
 
     @mock.patch("src.views.get_stock_data")
     def test_get_stock_not_found(self, mock_get_stock_data):

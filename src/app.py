@@ -1,8 +1,10 @@
 import concurrent.futures
-from flask import Flask, jsonify, request
-from datetime import datetime
 import logging
+from datetime import datetime
+
 from dotenv import load_dotenv
+from flask import Flask, jsonify, request
+
 from src.views import get_currency_data, get_stock_data
 
 load_dotenv()
@@ -21,6 +23,7 @@ def home():
 @app.route("/currency", methods=["GET"])
 def currency():
     try:
+        logging.debug("Fetching currency data")
         currency_data = get_currency_data()
         return jsonify(currency_data), 200
     except Exception as e:
@@ -32,10 +35,8 @@ def currency():
 def get_stock(symbol):
     try:
         data = get_stock_data(symbol)
-        if data is None:
-            return jsonify({"error": "Stock not found"}), 404
         return jsonify(data), 200
-    except ValueError as e:  # или другой тип ошибки, который выбрасывает ваше API
+    except ValueError as e:
         app.logger.error("Error fetching stock data: %s", str(e))
         return jsonify({"error": "Stock not found"}), 404
     except Exception as e:

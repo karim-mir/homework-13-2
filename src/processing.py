@@ -5,11 +5,9 @@ from typing import Any, Dict, List
 def filter_by_state(data: List[Dict[str, Any]], state: str = "EXECUTED") -> List[Dict[str, Any]]:
     """
     Фильтрует список словарей по значению ключа 'state'.
-
     :param data: Список словарей, который нужно фильтровать.
     :param state: Значение ключа 'state' для фильтрации. По умолчанию 'EXECUTED'.
     :return: Новый список словарей, содержащих только те, у которых ключ 'state' соответствует заданному значению.
-
     Пример:
     >>> filter_by_state([{"id": 1, "state": "EXECUTED"}, {"id": 2, "state": "CANCELED"}])
     [{'id': 1, 'state': 'EXECUTED'}]
@@ -20,12 +18,10 @@ def filter_by_state(data: List[Dict[str, Any]], state: str = "EXECUTED") -> List
 def sort_by_date(data: List[Dict[str, Any]], reverse: bool = True) -> List[Dict[str, Any]]:
     """
     Сортирует список словарей по дате.
-
     :param data: Список словарей, который нужно сортировать.
     :param reverse: Параметр для определения порядка сортировки.
                     По умолчанию True (убывание). Если False, то сортировка в порядке возрастания.
     :return: Новый список словарей, отсортированный по дате.
-
     Пример:
     >>> sort_by_date([{"id": 1, "date": "2022-01-01T12:00:00"}, {"id": 2, "date": "2021-01-01T12:00:00"}])
     [{'id': 1, 'date': '2022-01-01T12:00:00'}, {'id': 2, 'date': '2021-01-01T12:00:00'}]
